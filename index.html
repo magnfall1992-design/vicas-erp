@@ -223,6 +223,11 @@ input.search{padding:6px 10px;border:1px solid var(--line-strong);border-radius:
 h3.sec{font-family:var(--f-display);font-size:14px;margin:0;letter-spacing:.02em}
 .loading{padding:60px 20px;text-align:center;color:var(--fg-3)}
 
+.prow{display:grid;grid-template-columns:2fr 1.4fr .7fr 1fr;gap:6px}
+.prow input{padding:7px 9px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);width:100%;min-width:0}
+@media (max-width:560px){.prow{grid-template-columns:1fr 1fr;padding-bottom:6px;border-bottom:1px dashed var(--line)}}
+.tbl .steps{flex-wrap:nowrap}
+
 </style></head><body>
 <div id="app"></div>
 <script>
@@ -238,11 +243,11 @@ function vicasDemo(todayISO){
   const config = [{ id:"main", seededAt: now, version:1,
     seuils:{S0:25000,S1:250000,S2:1000000,S3:5000000,SF:2000000},
     seuilTresorerie: 150*M, slaHeures:48,
-    entreprise:"VICAS S.A.R.L.", demo:true }];
+    entreprise:"VICAS S.A.R.L.", demo:true, v2:true }];
 
   const P = (id,code,intitule,client,type,localite,chef,montant,debut,fin,phys,dep,fac,enc,statut,risque,jalons,histo)=>({
     id,code,intitule,client,type,localite,chef,montant:montant*M,avenants:0,dateDebut:debut,dateFin:fin,
-    avancement:phys,depenses:dep*M,facture:fac*M,encaisse:enc*M,statut,risque,jalons,
+    avancement:phys,budget:Math.round(montant*0.84)*M,depenses:dep*M,facture:fac*M,encaisse:enc*M,statut,risque,jalons,
     histAv:histo.map(x=>[x[0],Math.round(x[1]*phys/(histo[histo.length-1][1]||1))]), hist:[H("Système","Projet importé (données de démonstration)",-60)]});
 
   const projets = [
@@ -283,7 +288,28 @@ function vicasDemo(todayISO){
     {id:"o6",ref:"AO Ville de Saint-Louis",intitule:"Curage des canaux à ciel ouvert",client:"Ville de Saint-Louis",montant:140*M,dateLimite:d(-45),statut:"Perdue",responsable:"F. Ba",probabilite:0},
     {id:"o7",ref:"Demande directe",intitule:"Gestion déléguée des boues — Kaolack & Thiès (PPP)",client:"État du Sénégal / partenaires",montant:2450*M,dateLimite:d(28),statut:"En préparation",responsable:"Direction Générale",probabilite:30}
   ];
-  offres.forEach(o=>o.hist=[H("F. Ba","Offre enregistrée",-40)]);
+  // Données du dossier de soumission (offre financière) — reprises automatiquement à la création du marché
+  const SOUM={
+    o1:["Exploitation","Pikine / Guédiawaye",12,30,{mo:92,mat:38,eng:118,st:20,fg:34},[["Mobilisation des équipes",1],["Campagne pré-hivernage",8],["Campagne post-hivernage",12]]],
+    o2:["Assainissement","Mbour",18,45,{mo:210,mat:395,eng:160,st:85,fg:70},[["Installation de chantier",1],["Collecteurs primaires",10],["Réception provisoire",18]]],
+    o3:["Exploitation","Dakar et régions",36,20,{mo:14,mat:2,eng:22,st:0,fg:5},[["Démarrage des tournées",1],["Bilan annuel",12]]],
+    o4:["BTP","Ziguinchor",14,60,{mo:150,mat:260,eng:95,st:60,fg:55},[["Terrassements",3],["Génie civil",10],["Mise en service",14]]],
+    o5:["Exploitation","Port de Dakar",24,15,{mo:58,mat:22,eng:55,st:12,fg:16},[["Diagnostic des réseaux",2],["Plan de maintenance préventive",4],["Bilan à mi-parcours",12]]],
+    o6:["Exploitation","Saint-Louis",6,30,{mo:40,mat:8,eng:45,st:10,fg:12},[]],
+    o7:["Valorisation des boues","Kaolack / Thiès",60,120,{mo:420,mat:610,eng:380,st:240,fg:220},[["Études détaillées",6],["Construction",24],["Exploitation",60]]]};
+  offres.forEach(o=>{const x=SOUM[o.id];o.type=x[0];o.localite=x[1];o.delaiMois=x[2];o.demarrage=d(x[3]);o.deb={};Object.keys(x[4]).forEach(k=>o.deb[k]=x[4][k]*M);o.jalons=x[5].map(j=>({n:j[0],mois:j[1]}));o.hist=[H("F. Ba","Offre enregistrée",-40)]});
+  const o5=offres.find(o=>o.id==="o5");o5.attribution={ref:"Lettre PAD/DG/2026-311",date:d(-6)};o5.hist.push(H("F. Ba","Attribution notifiée : Lettre PAD/DG/2026-311",-6));
+
+  // Interventions d'entretien (ordres de travail du Chef de parc)
+  let oi=0;
+  const OT=(eng,j,type,nature,metier,nom,statut,rapport,mo,pieces,compteur)=>({id:"ot"+(++oi),num:"OT-"+String(500+oi),enginId:eng,date:d(j),type,nature,intervenant:{metier,nom,statut},rapport,piece:null,mainOeuvre:mo,pieces:pieces.map(p=>({designation:p[0],reference:p[1],qte:p[2],pu:p[3]})),total:mo+pieces.reduce((a,p)=>a+p[2]*p[3],0),compteur,saisiPar:"O. Sarr (PARC)"});
+  const maintenances=[
+    OT("e1",-40,"Préventif","Vidange moteur et filtres 180 000 km","Mécanicien","Atelier VICAS (I. Ndao)","Interne","Vidange huile moteur 15W40, remplacement filtres huile, gasoil et air. Contrôle courroies RAS.",35000,[["Huile moteur 15W40 (L)","SHELL-RIM-15W40",38,4200],["Filtre à huile","MB A4571800110",1,28500],["Filtre à gasoil","MB A4720920405",1,41000],["Filtre à air","MB A0040942404",1,67000]],180050),
+    OT("e3",-6,"Curatif","Diagnostic pompe haute pression","Mécanicien","Hydro Services Dakar","Prestataire externe","Pompe HP hors service : pistons rayés, joints détruits. Pièce de remplacement commandée (délai 10 jours). Engin immobilisé.",150000,[["Kit joints pompe HP","WOMA 150Z-KJ",1,385000]],241000),
+    OT("e13",-4,"Curatif","Embrayage patine","Mécanicien","Atelier VICAS (I. Ndao)","Interne","Disque d'embrayage usé à 90 %. Devis kit embrayage demandé au fournisseur.",20000,[],250100),
+    OT("e21",-18,"Curatif","Feux arrière et faisceau","Électricien","Auto-Élec Thiaroye","Prestataire externe","Faisceau arrière oxydé, remplacement partiel et 2 feux. Essai OK.",45000,[["Feu arrière LED 24 V","HELLA 2VP-340",2,38000],["Connecteurs étanches","DEUTSCH DT-6",6,2500]],301200),
+    OT("e9",-25,"Curatif","Reprise caisse citerne","Tôlier","Tôlerie Mbao","Prestataire externe","Fissure soudure sur le berceau de citerne, reprise par soudure et peinture anticorrosion.",90000,[["Tôle acier 4 mm (m²)","S235-4",2,26000],["Peinture antirouille (kg)","SIPEINT-AR",3,6500]],208900)
+  ];
 
   const E=(id,code,type,marque,immat,statut,affect,chauffeur,compteur,unite,prochain,loc,depuis,cout)=>({id,code,type,marque,immat,statut,affectation:affect,chauffeur,compteur,unite,prochainEntretien:prochain,localisation:loc,depuis:d(depuis),coutMois:cout*1000,hist:[]});
   const engins = [
@@ -427,7 +453,7 @@ function vicasDemo(todayISO){
     V("Moussa Kane","78 902 33 45","Rufisque Est","Rufisque",10,12,-2,"Terminée","e16","Espèces",true)
   ];
 
-  return {config,projets,offres,engins,comptes,mouvements,factures,requetes,interventions};
+  return {config,projets,offres,engins,comptes,mouvements,factures,requetes,interventions,maintenances};
 }
 if (typeof module!=="undefined") module.exports={vicasDemo};
 
@@ -437,7 +463,7 @@ if (typeof module!=="undefined") module.exports={vicasDemo};
    Stockage : base partagée (capacité db de l'artifact claude.ai) si disponible, sinon démo locale (navigateur). */
 (function(){
 "use strict";
-const COLLS=["config","projets","offres","engins","comptes","mouvements","factures","requetes","interventions"];
+const COLLS=["config","projets","offres","engins","comptes","mouvements","factures","requetes","interventions","maintenances"];
 const LS_DATA="vicas-erp-alpha-data", LS_ROLE="vicas-erp-alpha-role", LS_THEME="vicas-erp-theme";
 const M=1e6;
 
@@ -493,6 +519,10 @@ const ROLES={
   AGENT:{lib:"Agent (demandeur)",nom:"L. Mendy"}
 };
 const SERVICES={Direction:"DG",Exploitation:"DT",Chantiers:"CP",Parc:"PARC",Achats:"ACH",Commercial:"COM",RH:"RH",Finances:"DAF"};
+const CHEFS=["S. Gueye","A. Sy","M. Diop","K. Ndour","B. Faye"];
+const RUBRIQUES=[["mo","Main-d'œuvre"],["mat","Matériaux et fournitures"],["eng","Matériel et engins"],["st","Sous-traitance"],["fg","Frais généraux de chantier"]];
+const debTotal=o=>o&&o.deb?RUBRIQUES.reduce((a,[k])=>a+(o.deb[k]||0),0):0;
+const addMonths=(iso,n)=>{const x=new Date(iso+"T12:00:00");x.setMonth(x.getMonth()+n);return x.toISOString().slice(0,10)};
 const REQ_TYPES=["Fournitures","Achat / prestation","Paiement fournisseur","Avance sur salaire","Mission / véhicule","Carburant","Congé","Avenant projet"];
 
 /* ---------- état ---------- */
@@ -549,8 +579,16 @@ async function boot(){
     let ok=false;
     if(raw){try{const d=JSON.parse(raw);if(d&&d.config&&d.config.main){COLLS.forEach(c=>S.data[c]=d[c]||{});ok=true}}catch(e){}}
     if(!ok){loadDemoInto(S.data);saveLocal()}
+    else if(!(S.data.config.main&&S.data.config.main.v2)){migrateV2(S.data);saveLocal()}
     render();
   }
+}
+function migrateV2(D){ // alpha 0.2 : dossier de soumission des offres, budget des marchés, interventions d'entretien
+  const demo=vicasDemo(todayISO());
+  if(!D.maintenances||!Object.keys(D.maintenances).length){D.maintenances={};demo.maintenances.forEach(m=>D.maintenances[m.id]=m)}
+  demo.offres.forEach(o=>{const x=D.offres[o.id];if(x&&!x.deb){["type","localite","delaiMois","demarrage","deb","jalons"].forEach(k=>x[k]=o[k]);if(x.statut==="Gagnée"&&!x.projetId&&!x.attribution)x.attribution=o.attribution}});
+  Object.values(D.projets||{}).forEach(p=>{if(!p.budget)p.budget=Math.round(p.montant*0.84)});
+  D.config.main.v2=true;
 }
 async function seedDb(){
   if(S.mode!=="db")return;
@@ -631,8 +669,10 @@ function instances(){
   const fFour=list("factures").filter(f=>f.sens==="fournisseur"&&f.statut==="À valider");
   const fFourAPayer=list("factures").filter(f=>f.sens==="fournisseur"&&f.statut==="Validée");
   const moiReq=req.filter(r=>etapeRole(r)===S.role), moiFac=fFour.filter(f=>etapeFacture(f)===S.role);
+  const aff=list("offres").filter(o=>o.statut==="Gagnée"&&!o.projetId);
+  const moiAff=(S.role==="DG"||S.role==="DT")?aff:[];
   const sum=(a,k="montant")=>a.reduce((s,x)=>s+(x[k]||0),0);
-  return {req,paiements,autres,offres,offresUrg,soumises,fClient,echues,fFour,fFourAPayer,moiReq,moiFac,sum};
+  return {req,paiements,autres,offres,offresUrg,soumises,fClient,echues,fFour,fFourAPayer,moiReq,moiFac,aff,moiAff,sum};
 }
 
 function alertes(){
@@ -694,7 +734,7 @@ const NAV=[
 ];
 const TITLES={cockpit:"Cockpit Président",projets:"Marchés et projets",projet:"Fiche projet",commercial:"Offres et appels d'offres",instances:"Requêtes et validations",requete:"Requête",factures:"Factures",tresorerie:"Trésorerie",flotte:"Parc et flotte",engin:"Fiche engin",vidange:"Vidange à la demande",parametres:"Paramètres"};
 
-function navCounts(){const I=instances();return{instances:I.moiReq.length+I.moiFac.length,factures:I.echues.length,vidange:list("interventions").filter(v=>v.statut==="Nouvelle").length,flotte:list("engins").filter(e=>e.statut==="En panne").length}}
+function navCounts(){const I=instances();return{instances:I.moiReq.length+I.moiFac.length+I.moiAff.length,commercial:I.aff.length,factures:I.echues.length,vidange:list("interventions").filter(v=>v.statut==="Nouvelle").length,flotte:list("engins").filter(e=>e.statut==="En panne").length}}
 
 function render(){
   const root=$("#app"); if(!root)return;
@@ -709,7 +749,7 @@ function shell(body){
   const banner=S.mode==="db"&&S.emptyDb?`<div class="banner info"><b>La base partagée est vide.</b><span>Chargez le jeu de données de démonstration pour commencer les tests.</span><span class="grow"></span>${S.canWrite?`<button class="btn pri" data-act="seed">Charger les données de démonstration</button>`:`<span class="muted">Demandez au propriétaire de l'initialiser.</span>`}</div>`:"";
   return `<div class="app">
   <aside class="rail" id="rail">
-    <div class="brand">${LOGO}<div><b>VICAS ERP</b><small>Version alpha</small></div></div>
+    <div class="brand">${LOGO}<div><b>VICAS ERP</b><small>Alpha 0.2</small></div></div>
     <nav class="nav" aria-label="Modules">${nav}</nav>
     <div class="rail-foot">Données de démonstration fictives.<br>Cahier des charges VICAS-DSI-CDC-ERP-001 v1.2</div>
   </aside>
@@ -740,7 +780,7 @@ VIEWS.cockpit=function(){
   const avgPhys=valeur?prj.reduce((a,p)=>a+p.avancement*prjCalc(p).montant,0)/valeur:0;
   const avgTemps=valeur?prj.reduce((a,p)=>a+prjCalc(p).temps*prjCalc(p).montant,0)/valeur:0;
   const dispo=tresoDispo(), net30=dispo+fluxPrevus(0,30), proj=projection(13);
-  const moi=I.moiReq.length+I.moiFac.length, moiMt=I.sum(I.moiReq)+I.sum(I.moiFac);
+  const moi=I.moiReq.length+I.moiFac.length+I.moiAff.length, moiMt=I.sum(I.moiReq)+I.sum(I.moiFac)+I.sum(I.moiAff);
   const crit=prj.filter(p=>prjCalc(p).sante!=="ok").length;
   const al=alertes();
   const comptes=list("comptes").map(cp=>({cp,s:soldeCompte(cp)})).sort((a,b)=>b.s-a.s);
@@ -783,6 +823,7 @@ VIEWS.cockpit=function(){
         <a href="#factures"><span class="n">${I.fFourAPayer.length}</span><span class="l">Factures validées à payer</span><span class="m">${fm(I.sum(I.fFourAPayer))} FCFA</span></a>
         <a href="#factures" class="${I.echues.length?"hot":""}"><span class="n">${I.echues.length}</span><span class="l">Factures clients échues</span><span class="m">${fm(I.sum(I.echues)-I.sum(I.echues,"paye"))} FCFA à recouvrer</span></a>
         <a href="#factures"><span class="n">${I.fClient.length}</span><span class="l">Factures clients ouvertes</span><span class="m">${fm(I.sum(I.fClient)-I.sum(I.fClient,"paye"))} FCFA</span></a>
+        <a href="#commercial" class="${I.aff.length?"hot":""}"><span class="n">${I.aff.length}</span><span class="l">Marchés gagnés à lancer</span><span class="m">${I.aff.length?"chef de projet à désigner":"aucun en attente"}</span></a>
         <a href="#commercial" class="${I.offresUrg.length?"hot":""}"><span class="n">${I.offres.length}</span><span class="l">Offres en préparation</span><span class="m">${I.offresUrg.length} à déposer sous 7 j</span></a>
         <a href="#commercial"><span class="n">${I.soumises.length}</span><span class="l">Offres soumises</span><span class="m">${fm(I.sum(I.soumises))} FCFA en attente</span></a>
       </div></div></div>
@@ -840,12 +881,13 @@ VIEWS.projet=function(id){
     ${canEdit?`<button class="btn" data-act="avancement" data-id="${p.id}">Mettre à jour l'avancement</button><button class="btn" data-act="avenant" data-id="${p.id}">Demander un avenant</button><button class="btn" data-act="editProjet" data-id="${p.id}">Modifier</button>`:`<span class="muted" style="font-size:13px">Lecture seule pour votre profil</span>`}</div>
   <section class="panel"><header><h2>${esc(p.intitule)}</h2><span class="right">${statutPill(p.statut)} ${p.statut==="En cours"?santePill(k.sante):""}</span></header>
     <div class="body grid g2">
-      <dl class="kv"><dt>Référence</dt><dd>${esc(p.code)}</dd><dt>Client</dt><dd>${esc(p.client)}</dd><dt>Activité</dt><dd>${esc(p.type)}</dd><dt>Localité</dt><dd>${esc(p.localite)}</dd><dt>Chef de projet</dt><dd>${esc(p.chef)}</dd><dt>Période</dt><dd>${dfr(p.dateDebut)} → ${dfr(p.dateFin)}</dd><dt>Montant initial</dt><dd class="num">${fcfa(p.montant)}</dd><dt>Avenants</dt><dd class="num">${fcfa(p.avenants||0)}</dd></dl>
+      <dl class="kv"><dt>Référence</dt><dd>${esc(p.code)}</dd><dt>Client</dt><dd>${esc(p.client)}</dd><dt>Activité</dt><dd>${esc(p.type)}</dd><dt>Localité</dt><dd>${esc(p.localite)}</dd><dt>Chef de projet</dt><dd>${esc(p.chef)}</dd><dt>Période</dt><dd>${dfr(p.dateDebut)} → ${dfr(p.dateFin)}</dd><dt>Montant initial</dt><dd class="num">${fcfa(p.montant)}</dd><dt>Avenants</dt><dd class="num">${fcfa(p.avenants||0)}</dd>${p.budget?`<dt>Budget déboursés</dt><dd class="num">${fcfa(p.budget)} <span class="muted" style="font-weight:400">(marge prév. ${pct((1-p.budget/k.montant)*100)})</span></dd><dt>Dépensé / budget</dt><dd class="num ${p.depenses>p.budget?"bad-t":""}">${pct(p.depenses/p.budget*100)}</dd>`:""}${p.offreRef?`<dt>Origine</dt><dd>Offre ${esc(p.offreRef)}</dd>`:""}</dl>
       <div class="stack">
         ${[["Avancement physique",p.avancement,"var(--blue)"],["Délai consommé",k.temps,"var(--fg-3)"],["Dépensé / marché",k.depPct,"var(--orange)"],["Facturé / marché",k.facPct,"var(--info)"],["Encaissé / marché",k.encPct,"var(--ok)"]].map(([l,v,c])=>`<div><div class="row" style="justify-content:space-between;font-size:13.5px"><span>${l}</span><b class="num">${pct(v)}</b></div><div class="bar"><i style="width:${clamp(v,0,100)}%;background:${c}"></i></div></div>`).join("")}
         <div class="row" style="font-size:13px;gap:16px"><span>Retard planning : <b class="${k.retard>7?"bad-t":""}">${k.retard>0?Math.round(k.retard)+" pts":"aucun"}</b></span><span>Écart dépenses : <b class="${k.ecartDep>8?"warn-t":""}">${k.ecartDep>0?"+":""}${Math.round(k.ecartDep)} pts</b></span><span>Créance client : <b>${fm(k.creance)}</b></span></div>
         ${hv.length>1?`<div class="row" style="font-size:12.5px;color:var(--fg-3)">Évolution de l'avancement ${spark(hv,"var(--blue)")}</div>`:""}
       </div></div></section>
+  ${p.deb?`<section class="panel"><header><h2>Budget repris du dossier de soumission</h2><span class="hint">déboursés prévisionnels par rubrique</span></header><div class="body flush tbl-wrap"><table class="tbl"><thead><tr><th>Rubrique</th><th class="r">Prévu</th><th class="r">Part</th></tr></thead><tbody>${RUBRIQUES.map(([kk,l])=>`<tr><td>${l}</td><td class="r num">${fmt(p.deb[kk]||0)}</td><td class="r num">${pct((p.deb[kk]||0)/p.budget*100)}</td></tr>`).join("")}<tr><td><b>Total déboursés</b></td><td class="r num"><b>${fmt(p.budget)}</b></td><td></td></tr></tbody></table></div></section>`:""}
   <section class="grid g2">
     <div class="panel"><header><h2>Jalons</h2></header><div class="body flush"><table class="tbl"><tbody>${(p.jalons||[]).map((j,i)=>`<tr><td>${esc(j.n)}</td><td class="num">${dfr(j.d)}</td><td>${j.f?'<span class="pill ok">Atteint</span>':(j.d<todayISO()?'<span class="pill bad">En retard</span>':'<span class="pill">À venir</span>')}</td><td class="r">${canEdit&&!j.f?`<button class="btn sm" data-act="jalon" data-id="${p.id}" data-i="${i}">Marquer atteint</button>`:""}</td></tr>`).join("")||`<tr><td class="empty">Aucun jalon.</td></tr>`}</tbody></table></div></div>
     <div class="panel"><header><h2>Engins affectés</h2><span class="hint">${eng.length}</span></header><div class="body flush"><table class="tbl"><tbody>${eng.map(e=>`<tr class="click" data-href="#engin-${e.id}"><td><b>${esc(e.code)}</b> <span class="muted">${esc(e.type)}</span></td><td>${esc(e.chauffeur)}</td><td>${statutPill(e.statut)}</td></tr>`).join("")||`<tr><td class="empty">Aucun engin affecté.</td></tr>`}</tbody></table></div></div>
@@ -864,8 +906,9 @@ VIEWS.commercial=function(){
   return `<div class="toolbar"><span class="muted">Pipeline pondéré : <b class="num">${fm(pond)} FCFA</b> · taux de succès ${gag+perd?pct(gag/(gag+perd)*100):"—"}</span><span class="grow"></span><button class="btn pri" data-act="newOffre">${icon("plus")}Nouvelle offre</button></div>
   <div class="grid g4">${cols.map(c=>{const it=os.filter(o=>o.statut===c);return `<div class="panel"><header><h2>${c}</h2><span class="hint">${it.length} · ${fm(it.reduce((a,o)=>a+o.montant,0))}</span></header><div class="body stack">${it.map(o=>{const j=daysBetween(t,o.dateLimite);return `<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:5px">
      <div style="font-weight:600;font-size:14px;line-height:1.3">${esc(o.intitule)}</div><div class="t2 muted" style="font-size:12.5px">${esc(o.ref)} · ${esc(o.client)}</div>
+     ${debTotal(o)?`<div class="t2 muted" style="font-size:12px">Délai ${o.delaiMois||"—"} mois · déboursés ${fm(debTotal(o))} · marge ${pct((1-debTotal(o)/o.montant)*100)}</div>`:""}
      <div class="row" style="justify-content:space-between"><b class="num">${fm(o.montant)}</b>${c==="En préparation"?`<span class="pill ${j<=3?"bad":j<=7?"warn":""}">${j>=0?"J−"+j:"échue"}</span>`:`<span class="muted" style="font-size:12px">${dfr(o.dateLimite)}</span>`}</div>
-     <div class="row" style="gap:6px">${c==="En préparation"?`<button class="btn sm" data-act="offreStatut" data-id="${o.id}" data-v="Soumise">Marquer soumise</button>`:""}${c==="Soumise"?`<button class="btn sm ok" data-act="offreStatut" data-id="${o.id}" data-v="Gagnée">Gagnée</button><button class="btn sm bad" data-act="offreStatut" data-id="${o.id}" data-v="Perdue">Perdue</button>`:""}${c==="Gagnée"&&!o.projetId?`<button class="btn sm pri" data-act="offreProjet" data-id="${o.id}">Créer le marché</button>`:""}${o.projetId?`<a class="btn sm" href="#projet-${o.projetId}">Voir le marché</a>`:""}</div></div>`}).join("")||`<div class="empty">Aucune offre.</div>`}</div></div>`}).join("")}</div>`;
+     <div class="row" style="gap:6px">${c==="En préparation"?`<button class="btn sm" data-act="offreStatut" data-id="${o.id}" data-v="Soumise">Marquer soumise</button>`:""}${c==="Soumise"?`<button class="btn sm ok" data-act="attribuer" data-id="${o.id}">Attribuée</button><button class="btn sm bad" data-act="offreStatut" data-id="${o.id}" data-v="Perdue">Perdue</button>`:""}${c==="Gagnée"&&!o.projetId?(S.role==="DT"||S.role==="DG"?`<button class="btn sm pri" data-act="affecter" data-id="${o.id}">Désigner le chef de projet</button>`:`<span class="pill or">En attente : DT ou Président</span>`):""}${o.projetId?`<a class="btn sm" href="#projet-${o.projetId}">Voir le marché</a>`:""}</div></div>`}).join("")||`<div class="empty">Aucune offre.</div>`}</div></div>`}).join("")}</div>`;
 };
 
 VIEWS.instances=function(){
@@ -874,11 +917,13 @@ VIEWS.instances=function(){
   if(f==="moi") rs=rs.filter(r=>etapeRole(r)===S.role);
   else if(f==="attente") rs=rs.filter(r=>r.statut==="En attente");
   else if(f==="miennes") rs=rs.filter(r=>r.demandeur===me().nom);
-  const s=cfg().seuils;
-  return `<div class="toolbar"><div class="seg">${[["moi","À valider par moi"],["attente","Toutes en attente"],["miennes","Mes demandes"],["toutes","Historique"]].map(([k,l])=>`<button data-act="filt" data-k="req" data-v="${k}" class="${f===k?"on":""}">${l}</button>`).join("")}</div><span class="grow"></span><button class="btn pri" data-act="newReq">${icon("plus")}Nouvelle requête</button></div>
+  const s=cfg().seuils, I=instances();
+  const extra=f!=="moi"?"":(I.moiAff.length?`<div class="panel"><header><h2>Marchés gagnés à lancer</h2><span class="hint">désignez le chef de projet : le marché est créé à partir du dossier de soumission</span></header><div class="body flush tbl-wrap"><table class="tbl"><tbody>${I.moiAff.map(o=>`<tr><td><div class="t1">${esc(o.intitule)}</div><div class="t2">${esc(o.client)} · ${esc(o.attribution?o.attribution.ref:o.ref)}</div></td><td class="r num">${fm(o.montant)}</td><td class="num">${o.delaiMois||"—"} mois</td><td class="r"><button class="btn sm pri" data-act="affecter" data-id="${o.id}">Désigner le chef de projet</button></td></tr>`).join("")}</tbody></table></div></div>`:"")
+   +(I.moiFac.length?`<div class="panel"><header><h2>Factures fournisseurs à valider</h2><span class="hint">${I.moiFac.length}</span></header><div class="body flush tbl-wrap"><table class="tbl"><tbody>${I.moiFac.map(x=>`<tr><td class="num">${esc(x.numero)}</td><td><div class="t1">${esc(x.tiers)}</div><div class="t2">${esc(x.libelle)}${x.projetId?" · "+esc(projetNom(x.projetId)):""}</div></td><td class="r num">${fm(x.montant)}</td><td><span class="steps">${circuitFacture(x).map((c,i)=>`<span class="step ${i<x.etape?"done":i===x.etape?"cur":""}">${c}</span>`).join('<span class="arrow">›</span>')}</span></td><td class="r"><span class="row" style="gap:4px;flex-wrap:nowrap;justify-content:flex-end"><button class="btn sm ok" data-act="validerFacture" data-id="${x.id}">${x.etape===0&&x.projetId?"Service fait":"Valider"}</button><button class="btn sm bad" data-act="rejeterFacture" data-id="${x.id}">Rejeter</button></span></td></tr>`).join("")}</tbody></table></div></div>`:"");
+  return extra+`<div class="toolbar"><div class="seg">${[["moi","À valider par moi"],["attente","Toutes en attente"],["miennes","Mes demandes"],["toutes","Historique"]].map(([k,l])=>`<button data-act="filt" data-k="req" data-v="${k}" class="${f===k?"on":""}">${l}</button>`).join("")}</div><span class="grow"></span><button class="btn pri" data-act="newReq">${icon("plus")}Nouvelle requête</button></div>
   <div class="banner"><b>Circuit gradué :</b><span class="muted">N0 &lt; ${fm(s.S0)} (exécution directe) · N1 &lt; ${fm(s.S1)} (N+1) · N2 &lt; ${fm(s.S2)} (N+1 + DAF) · N3 &lt; ${fm(s.S3)} (+ DG) · N4 au-delà ou avenant (DT + DAF + DG)</span></div>
   <div class="panel"><div class="body flush tbl-wrap"><table class="tbl"><thead><tr><th>N°</th><th>Objet</th><th>Demandeur</th><th class="r">Montant</th><th>Niveau</th><th>Circuit</th><th>Âge</th><th>Statut</th><th></th></tr></thead><tbody>
-  ${rs.map(r=>{const er=etapeRole(r);return `<tr class="click" data-href="#requete-${r.id}"><td class="num">${esc(r.num)}</td><td><div class="t1">${esc(r.objet)}</div><div class="t2">${esc(r.type)}${r.projetId?" · "+esc(projetNom(r.projetId)):""}</div></td><td>${esc(r.demandeur)}<div class="t2">${esc(r.service)}</div></td><td class="r num">${r.montant?fm(r.montant):"—"}</td><td><span class="pill ${niveau(r)>=3?"or":""}">N${niveau(r)}</span></td><td>${stepsHtml(r)}</td><td class="num ${r.statut==="En attente"&&ageH(r)>cfg().slaHeures?"bad-t":""}">${r.statut==="En attente"?fage(ageH(r)):"—"}</td><td>${statutPill(r.statut)}</td><td class="r">${er===S.role?`<span class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn sm ok" data-act="valider" data-id="${r.id}">Valider</button><button class="btn sm bad" data-act="rejeter" data-id="${r.id}">Rejeter</button></span>`:""}</td></tr>`}).join("")||`<tr><td colspan="9" class="empty">${f==="moi"?"Rien à valider pour le profil « "+esc(me().lib)+" ». Changez de profil de test en haut à droite pour voir les autres files.":"Aucune requête."}</td></tr>`}
+  ${rs.map(r=>{const er=etapeRole(r);return `<tr class="click" data-href="#requete-${r.id}"><td class="num">${esc(r.num)}</td><td><div class="t1">${esc(r.objet)}</div><div class="t2">${esc(r.type)}${r.projetId?" · "+esc(projetNom(r.projetId)):""}</div></td><td>${esc(r.demandeur)}<div class="t2">${esc(r.service)}</div></td><td class="r num">${r.montant?fm(r.montant):"—"}</td><td><span class="pill ${niveau(r)>=3?"or":""}">N${niveau(r)}</span></td><td>${stepsHtml(r)}</td><td class="num ${r.statut==="En attente"&&ageH(r)>cfg().slaHeures?"bad-t":""}">${r.statut==="En attente"?fage(ageH(r)):"—"}</td><td>${statutPill(r.statut)}</td><td class="r">${er===S.role?`<span class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn sm ok" data-act="valider" data-id="${r.id}">Valider</button><button class="btn sm bad" data-act="rejeter" data-id="${r.id}">Rejeter</button></span>`:""}</td></tr>`}).join("")||`<tr><td colspan="9" class="empty">${f==="moi"?"Aucune requête à valider pour le profil « "+esc(me().lib)+" ». Changez de profil de test en haut à droite pour voir les autres files.":"Aucune requête."}</td></tr>`}
   </tbody></table></div></div>`;
 };
 function stepsHtml(r){const c=circuit(r);if(!c.length)return`<span class="step done">Exécution directe</span>`;return `<span class="steps">${c.map((x,i)=>{let cl="";if(r.statut==="Rejetée"&&i===r.etape)cl="rej";else if(i<r.etape||r.statut==="Validée"||r.statut==="Exécutée")cl="done";else if(i===r.etape&&r.statut==="En attente")cl="cur";return `<span class="step ${cl}" title="${esc(ROLES[x].lib)}">${x}</span>`}).join('<span class="arrow">›</span>')}</span>`}
@@ -948,7 +993,7 @@ VIEWS.flotte=function(){
    <div class="tile"><span class="lbl">Utilisation</span><span class="val">${pct(F.tauxUtil)}</span><span class="meta">${F.mission} en mission</span></div>
    <div class="tile"><span class="lbl">Immobilisés</span><span class="val ${F.panne?"bad-t":""}">${F.panne+F.entretien}</span><span class="meta">${F.panne} pannes · ${F.entretien} entretiens</span></div>
    <div class="tile"><span class="lbl">Coût d'exploitation mensuel</span><span class="val">${fm(cout)}</span><span class="meta">carburant, pièces, entretien</span></div></section>
-  <div class="toolbar"><div class="seg">${["Tous","Disponible","En mission","En entretien","En panne"].map(x=>`<button data-act="filt" data-k="fl" data-v="${x}" class="${f===x?"on":""}">${x}</button>`).join("")}</div><input class="search" id="flq" placeholder="Code, type, chauffeur…" value="${esc(S.filters.flq||"")}" data-input="flq"><span class="grow"></span>${["PARC","DT","DG"].includes(S.role)?`<button class="btn pri" data-act="newEngin">${icon("plus")}Ajouter un engin</button>`:""}</div>
+  <div class="toolbar"><div class="seg">${["Tous","Disponible","En mission","En entretien","En panne"].map(x=>`<button data-act="filt" data-k="fl" data-v="${x}" class="${f===x?"on":""}">${x}</button>`).join("")}</div><input class="search" id="flq" placeholder="Code, type, chauffeur…" value="${esc(S.filters.flq||"")}" data-input="flq"><span class="grow"></span>${["PARC","DT","DG"].includes(S.role)?`<button class="btn pri" data-act="newOT">${icon("plus")}Intervention d'entretien</button><button class="btn" data-act="newEngin">${icon("plus")}Ajouter un engin</button>`:""}</div>
   <div class="panel"><div class="body flush tbl-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Type</th><th>Immatriculation</th><th>Statut</th><th>Affectation</th><th>Chauffeur</th><th>Localisation</th><th class="r">Compteur</th><th>Entretien</th></tr></thead><tbody>
   ${es.map(e=>`<tr class="click" data-href="#engin-${e.id}"><td><b>${esc(e.code)}</b></td><td>${esc(e.type)}<div class="t2">${esc(e.marque)}</div></td><td class="num">${esc(e.immat)}</td><td>${statutPill(e.statut)}</td><td>${e.affectation?esc(projetNom(e.affectation)):"—"}</td><td>${esc(e.chauffeur)}</td><td>${esc(e.localisation)}</td><td class="r num">${fmt(e.compteur)} ${e.unite}</td><td>${entretienDu(e)?'<span class="pill bad">Dépassé</span>':entretienProche(e)?'<span class="pill warn">Proche</span>':'<span class="pill ok">OK</span>'}</td></tr>`).join("")||`<tr><td colspan="9" class="empty">Aucun engin.</td></tr>`}
   </tbody></table></div></div>`;
@@ -958,10 +1003,13 @@ VIEWS.engin=function(id){
   const e=get("engins",id); if(!e) return `<div class="empty">Engin introuvable. <a href="#flotte">Retour</a></div>`;
   const can=["PARC","DT","DG"].includes(S.role);
   const missions=list("interventions").filter(v=>v.enginId===e.id).sort((a,b)=>a.date<b.date?1:-1).slice(0,8);
-  return `<div class="toolbar"><a class="btn sm" href="#flotte">${icon("back")}Flotte</a><span class="grow"></span>${can?`<button class="btn pri" data-act="enginStatut" data-id="${e.id}">Changer statut / affectation</button><button class="btn" data-act="compteur" data-id="${e.id}">Relever le compteur</button>`:""}</div>
+  const ots=list("maintenances").filter(o=>o.enginId===e.id).sort((a,b)=>a.date<b.date?1:-1);
+  return `<div class="toolbar"><a class="btn sm" href="#flotte">${icon("back")}Flotte</a><span class="grow"></span>${can?`<button class="btn pri" data-act="newOT" data-id="${e.id}">Enregistrer une intervention</button><button class="btn" data-act="enginStatut" data-id="${e.id}">Changer statut / affectation</button><button class="btn" data-act="compteur" data-id="${e.id}">Relever le compteur</button>`:""}</div>
   <section class="panel"><header><h2>${esc(e.code)} — ${esc(e.type)}</h2><span class="right">${statutPill(e.statut)}</span></header>
   <div class="body grid g2"><dl class="kv"><dt>Marque / modèle</dt><dd>${esc(e.marque)}</dd><dt>Immatriculation</dt><dd>${esc(e.immat)}</dd><dt>Affectation</dt><dd>${e.affectation?(get("projets",e.affectation)?`<a href="#projet-${e.affectation}">${esc(projetNom(e.affectation))}</a>`:esc(projetNom(e.affectation))):"—"}</dd><dt>Chauffeur / opérateur</dt><dd>${esc(e.chauffeur)}</dd><dt>Localisation</dt><dd>${esc(e.localisation)}</dd><dt>Statut depuis</dt><dd>${dfr(e.depuis)} (${daysBetween(e.depuis,todayISO())} j)</dd>${e.panne&&(e.statut==="En panne"||e.statut==="En entretien")?`<dt>Motif</dt><dd>${esc(e.panne)}</dd>`:""}</dl>
-   <dl class="kv"><dt>Compteur</dt><dd class="num">${fmt(e.compteur)} ${e.unite}</dd><dt>Prochain entretien</dt><dd class="num">${fmt(e.prochainEntretien)} ${e.unite} ${entretienDu(e)?'<span class="pill bad">Dépassé</span>':entretienProche(e)?'<span class="pill warn">Proche</span>':""}</dd><dt>Coût mensuel</dt><dd class="num">${fcfa(e.coutMois||0)}</dd></dl></div></section>
+   <dl class="kv"><dt>Compteur</dt><dd class="num">${fmt(e.compteur)} ${e.unite}</dd><dt>Prochain entretien</dt><dd class="num">${fmt(e.prochainEntretien)} ${e.unite} ${entretienDu(e)?'<span class="pill bad">Dépassé</span>':entretienProche(e)?'<span class="pill warn">Proche</span>':""}</dd><dt>Coût mensuel</dt><dd class="num">${fcfa(e.coutMois||0)}</dd><dt>Coût d'entretien cumulé</dt><dd class="num">${fcfa(ots.reduce((a,o)=>a+o.total,0))} <span class="muted" style="font-weight:400">(${ots.length} intervention${ots.length>1?"s":""})</span></dd></dl></div></section>
+  <section class="panel"><header><h2>Interventions d'entretien</h2><span class="hint">rapport + coûts main-d'œuvre et pièces</span></header><div class="body flush tbl-wrap"><table class="tbl"><thead><tr><th>Date</th><th>OT</th><th>Type</th><th>Nature</th><th>Intervenant</th><th class="r">Main-d'œuvre</th><th class="r">Pièces</th><th class="r">Total</th><th></th></tr></thead><tbody>
+  ${ots.map(o=>`<tr><td class="num">${dfr(o.date)}</td><td class="num">${esc(o.num)}</td><td><span class="pill ${o.type==="Curatif"?"warn":"info"}">${esc(o.type)}</span></td><td>${esc(o.nature)}</td><td>${esc(o.intervenant.metier)}<div class="t2">${esc(o.intervenant.nom)} · ${esc(o.intervenant.statut)}</div></td><td class="r num">${fmt(o.mainOeuvre)}</td><td class="r num">${fmt(o.total-o.mainOeuvre)}</td><td class="r num"><b>${fmt(o.total)}</b></td><td class="r"><button class="btn sm" data-act="voirOT" data-id="${o.id}">Rapport</button></td></tr>`).join("")||`<tr><td colspan="9" class="empty">Aucune intervention enregistrée.</td></tr>`}</tbody></table></div></section>
   <section class="grid g2"><div class="panel"><header><h2>Historique</h2></header><div class="body"><ul class="hist">${[...(e.hist||[])].reverse().map(h=>`<li><span class="d">${dfr(h.d)}</span><span>${esc(h.quoi)} <span class="muted">— ${esc(h.qui)}</span></span></li>`).join("")||'<li class="muted">Aucun événement enregistré.</li>'}</ul></div></div>
    <div class="panel"><header><h2>Dernières vidanges</h2></header><div class="body flush"><table class="tbl"><tbody>${missions.map(v=>`<tr><td class="num">${dfr(v.date)}</td><td>${esc(v.client)}</td><td>${statutPill(v.statut)}</td></tr>`).join("")||`<tr><td class="empty">Aucune intervention de vidange.</td></tr>`}</tbody></table></div></div></section>`;
 };
@@ -1062,11 +1110,72 @@ ACT.avenant=d=>{const p=get("projets",d.id);openModal("Demande d'avenant — "+p
   f=>{if(!f.obj)return"Précisez l'objet de l'avenant.";const r=newReq({type:"Avenant projet",objet:f.obj+(num(f.jours)?` (+${num(f.jours)} j)`:""),montant:num(f.mt),projetId:p.id,service:"Chantiers",avenantJours:num(f.jours)});Store.put("requetes",r);toast("Avenant soumis au circuit N4.");return true})};
 
 ACT.newOffre=()=>openModal("Nouvelle offre",`<div class="fg">${fld("ref","Référence de l'avis",inp("ref","text","","required"))}${fld("client","Client",inp("client","text","","required"))}
+  ${fld("otype","Activité",sel("otype",["Assainissement","BTP","Exploitation","Huiles usagées","Valorisation des boues"],"Assainissement"))}${fld("oloc","Localité",inp("oloc","text",""))}
+  ${fld("delai","Délai d'exécution (mois)",inp("delai","number",12,"min=1"))}${fld("demar","Démarrage prévu",inp("demar","date",addDays(todayISO(),60)))}
+  ${RUBRIQUES.map(([k,l])=>fld("deb_"+k,"Déboursé — "+l+" (FCFA)",inp("deb_"+k,"number",0,"min=0 step=1000"))).join("")}
   ${fld("intitule","Intitulé",inp("intitule","text","","required"),true)}${fld("montant","Montant de l'offre (FCFA)",inp("montant","number","","min=0 step=1000"))}${fld("dateLimite","Date limite de dépôt",inp("dateLimite","date",addDays(todayISO(),14)))}
   ${fld("responsable","Responsable",inp("responsable","text",me().nom))}${fld("probabilite","Probabilité de gain (%)",inp("probabilite","number",40,"min=0 max=100"))}</div>`,
-  f=>{if(!f.intitule||!f.client)return"Renseignez l'intitulé et le client.";const o={id:uid("o"),ref:f.ref,client:f.client,intitule:f.intitule,montant:num(f.montant),dateLimite:f.dateLimite,statut:"En préparation",responsable:f.responsable,probabilite:num(f.probabilite),hist:[]};pushH(o,"Offre créée");Store.put("offres",o);toast("Offre enregistrée.");return true});
+  f=>{if(!f.intitule||!f.client)return"Renseignez l'intitulé et le client.";const deb={};RUBRIQUES.forEach(([k])=>deb[k]=num(f["deb_"+k]));const o={id:uid("o"),ref:f.ref,client:f.client,intitule:f.intitule,montant:num(f.montant),dateLimite:f.dateLimite,statut:"En préparation",responsable:f.responsable,probabilite:num(f.probabilite),type:f.otype,localite:f.oloc,delaiMois:num(f.delai)||12,demarrage:f.demar,deb,jalons:[],hist:[]};pushH(o,"Offre créée");Store.put("offres",o);toast("Offre enregistrée.");return true});
 ACT.offreStatut=d=>{const o=clone(get("offres",d.id));o.statut=d.v;if(d.v==="Gagnée")o.probabilite=100;if(d.v==="Perdue")o.probabilite=0;pushH(o,"Statut : "+d.v);Store.put("offres",o);toast("Offre : "+d.v.toLowerCase()+".")};
-ACT.offreProjet=d=>{const o=get("offres",d.id);const p={id:uid("p"),code:"P-"+todayISO().slice(0,4)+"-"+String(30+list("projets").length),intitule:o.intitule,client:o.client,type:"Exploitation",localite:"",chef:"",montant:o.montant,avenants:0,dateDebut:addDays(todayISO(),15),dateFin:addDays(todayISO(),380),avancement:0,depenses:0,facture:0,encaisse:0,statut:"En cours",risque:"Faible",jalons:[],histAv:[[todayISO(),0]],hist:[]};pushH(p,"Marché créé depuis l'offre "+o.ref);Store.put("projets",p);const oo=clone(o);oo.projetId=p.id;Store.put("offres",oo);location.hash="#projet-"+p.id;toast("Marché créé : complétez la fiche.")};
+ACT.offreProjetOld=d=>{const o=get("offres",d.id);const p={id:uid("p"),code:"P-"+todayISO().slice(0,4)+"-"+String(30+list("projets").length),intitule:o.intitule,client:o.client,type:"Exploitation",localite:"",chef:"",montant:o.montant,avenants:0,dateDebut:addDays(todayISO(),15),dateFin:addDays(todayISO(),380),avancement:0,depenses:0,facture:0,encaisse:0,statut:"En cours",risque:"Faible",jalons:[],histAv:[[todayISO(),0]],hist:[]};pushH(p,"Marché créé depuis l'offre "+o.ref);Store.put("projets",p);const oo=clone(o);oo.projetId=p.id;Store.put("offres",oo);location.hash="#projet-"+p.id;toast("Marché créé : complétez la fiche.")};
+
+ACT.attribuer=d=>{const o=get("offres",d.id);openModal("Attribution — "+o.intitule,`<div class="fg">${fld("aref","Référence de la lettre d'attribution / notification",inp("aref","text","","required"),true)}${fld("adate","Date de notification",inp("adate","date",todayISO()))}</div>
+  <div class="calc">Une fois l'attribution validée, le dossier est transmis au <b>Directeur technique</b> et au <b>Président</b> : l'un d'eux désigne le chef de projet et le marché est créé automatiquement à partir du dossier de soumission (montant, délai, déboursés, jalons).</div>`,
+  f=>{if(!f.aref)return"Indiquez la référence de l'attribution.";const x=clone(o);x.statut="Gagnée";x.probabilite=100;x.attribution={ref:f.aref,date:f.adate};pushH(x,"Attribution validée : "+f.aref);Store.put("offres",x);toast("Attribution enregistrée : transmise au DT et au Président.");return true},"Valider l'attribution")};
+ACT.affecter=d=>{const o=get("offres",d.id),db=debTotal(o),deb0=o.demarrage&&o.demarrage>todayISO()?o.demarrage:todayISO();
+  openModal("Lancer le marché",`<div class="calc"><b>${esc(o.intitule)}</b><br>${esc(o.client)} · ${esc(o.localite||"")} · ${esc(o.type||"")}<br>
+   Montant : <b>${fcfa(o.montant)}</b> · délai : <b>${o.delaiMois||12} mois</b> · démarrage : <b>${dfr(deb0)}</b> → fin : <b>${dfr(addMonths(deb0,o.delaiMois||12))}</b><br>
+   Déboursés prévus : <b>${fcfa(db)}</b>${db?` · marge prévisionnelle ${pct((1-db/o.montant)*100)}`:""}${(o.jalons||[]).length?`<br>Jalons : ${o.jalons.map(j=>esc(j.n)+" (M"+j.mois+")").join(" · ")}`:""}</div>
+   ${fld("chef","Chef de projet",sel("chef",CHEFS,CHEFS[0]),true,"Toutes les autres données sont reprises du dossier de soumission.")}`,
+  f=>{const debut=deb0, fin=addMonths(debut,o.delaiMois||12);
+    const p={id:uid("p"),code:"P-"+todayISO().slice(0,4)+"-"+String(30+list("projets").length).padStart(3,"0"),intitule:o.intitule,client:o.client,type:o.type||"Exploitation",localite:o.localite||"",chef:f.chef,montant:o.montant,avenants:0,budget:db||Math.round(o.montant*0.85),deb:o.deb||null,offreRef:(o.attribution&&o.attribution.ref)||o.ref,dateDebut:debut,dateFin:fin,avancement:0,depenses:0,facture:0,encaisse:0,statut:"En cours",risque:"Faible",jalons:(o.jalons||[]).map(j=>({n:j.n,d:addMonths(debut,j.mois),f:false})),histAv:[[todayISO(),0]],hist:[]};
+    pushH(p,"Marché créé automatiquement depuis l'offre "+o.ref+" — chef de projet : "+f.chef+" (désigné par "+ROLES[S.role].lib+")");Store.put("projets",p);
+    const oo=clone(o);oo.projetId=p.id;pushH(oo,"Marché lancé, chef de projet : "+f.chef);Store.put("offres",oo);location.hash="#projet-"+p.id;toast("Marché lancé et confié à "+f.chef+".");return true},"Lancer le marché")};
+
+/* ---------- interventions d'entretien (Chef de parc) ---------- */
+let otFile=null, otRows=1;
+const pieceRow=i=>`<div class="prow" data-row="${i}"><input id="p_des_${i}" name="p_des_${i}" placeholder="Pièce (désignation)"><input id="p_ref_${i}" name="p_ref_${i}" placeholder="Référence"><input id="p_q_${i}" name="p_q_${i}" type="number" min="0" step="1" placeholder="Qté"><input id="p_pu_${i}" name="p_pu_${i}" type="number" min="0" step="1" placeholder="Prix unit."></div>`;
+function otTotals(f){let pieces=[];for(let i=0;i<otRows;i++){const q=num(f["p_q_"+i]),pu=num(f["p_pu_"+i]);if((f["p_des_"+i]||"").trim()||q*pu)pieces.push({designation:(f["p_des_"+i]||"").trim(),reference:(f["p_ref_"+i]||"").trim(),qte:q,pu})}
+  const mo=num(f.mo), tp=pieces.reduce((a,p)=>a+p.qte*p.pu,0);return {pieces,mo,tp,total:mo+tp}}
+ACT.newOT=d=>{otFile=null;otRows=1;const engs=list("engins").sort((a,b)=>a.code<b.code?-1:1);const e=d&&d.id?get("engins",d.id):null;
+  openModal("Intervention d'entretien",`<div class="fg">
+   ${fld("eng","Engin",sel("eng",engs.map(x=>[x.id,x.code+" — "+x.type]),e?e.id:engs[0].id))}${fld("otype","Type",sel("otype",["Curatif","Préventif"],e&&e.statut==="En panne"?"Curatif":"Préventif"))}
+   ${fld("nature","Nature de l'intervention",inp("nature","text","","required"),true)}
+   ${fld("metier","Intervenant",sel("metier",["Mécanicien","Électricien","Tôlier","Pneumaticien","Autre"],"Mécanicien"))}${fld("statutI","Statut",sel("statutI",["Interne","Prestataire externe"],"Interne"))}
+   ${fld("nomI","Nom de l'intervenant / atelier",inp("nomI","text",""),true)}
+   ${fld("rapport","Rapport d'intervention",`<textarea id="rapport" name="rapport" placeholder="Constat, travaux réalisés, essais, recommandations"></textarea>`,true)}
+   ${fld("fichier","Ou joindre le rapport (photo ou PDF)",`<input id="fichier" type="file" accept="image/*,application/pdf">`,true,"Une photo du rapport signé suffit (prise avec le téléphone).")}
+   ${fld("mo","Main-d'œuvre (FCFA)",inp("mo","number",0,"min=0 step=500"))}${fld("cpt","Compteur à l'intervention",inp("cpt","number",e?e.compteur:0,"min=0"))}</div>
+   <div><label style="font-size:12.5px;color:var(--fg-2);font-weight:600">Pièces détachées (désignation, référence si possible, quantité, prix unitaire)</label><div id="prows" class="stack" style="gap:6px;margin-top:4px">${pieceRow(0)}</div>
+   <button type="button" class="btn sm" data-act="addPiece" style="margin-top:6px">${icon("plus")}Ajouter une pièce</button></div>
+   <div class="fg">${fld("prochain","Prochain entretien à (compteur)",inp("prochain","number",e?e.prochainEntretien:0,"min=0"))}
+   <div class="fld"><label for="remise">Remise en service</label><select id="remise" name="remise"><option value="oui">Oui, l'engin redevient disponible</option><option value="non">Non, l'engin reste immobilisé</option></select></div>
+   <div class="fld full"><label><input type="checkbox" id="fact" name="fact" value="1"> Créer la facture du prestataire à valider (circuit RAF / DG)</label></div></div>
+   <div class="calc" id="ottot">—</div>`,
+  f=>{const ee=get("engins",f.eng);if(!f.nature)return"Précisez la nature de l'intervention.";if(!(f.rapport||"").trim()&&!otFile)return"Le rapport d'intervention est obligatoire (texte ou fichier joint).";
+    const t=otTotals(f);if(t.total<=0)return"Indiquez le coût : main-d'œuvre et/ou pièces détachées.";
+    const o={id:uid("ot"),num:"OT-"+String(500+list("maintenances").length+1),enginId:ee.id,date:todayISO(),type:f.otype,nature:f.nature,intervenant:{metier:f.metier,nom:f.nomI||"—",statut:f.statutI},rapport:(f.rapport||"").trim(),piece:otFile,mainOeuvre:t.mo,pieces:t.pieces,total:t.total,compteur:num(f.cpt)||ee.compteur,saisiPar:actor()};
+    if(f.fact&&f.statutI==="Prestataire externe"){const fa={id:uid("f"),sens:"fournisseur",numero:"FA-"+o.num,tiers:o.intervenant.nom,libelle:o.nature+" — "+ee.code,projetId:"",montant:o.total,dateEmission:todayISO(),echeance:addDays(todayISO(),30),paye:0,statut:"À valider",etape:0,hist:[]};pushH(fa,"Facture créée depuis l'intervention "+o.num);Store.put("factures",fa);o.factureId=fa.id}
+    Store.put("maintenances",o);
+    const x=clone(ee);x.compteur=Math.max(x.compteur,o.compteur);if(num(f.prochain))x.prochainEntretien=num(f.prochain);
+    if(f.remise==="oui"&&(x.statut==="En panne"||x.statut==="En entretien")){x.statut="Disponible";x.panne="";x.depuis=todayISO()}
+    pushH(x,`Intervention ${o.num} (${o.type.toLowerCase()}) : ${o.nature} — ${fm(o.total)} FCFA`);Store.put("engins",x);
+    toast("Intervention "+o.num+" enregistrée : "+fcfa(o.total)+".");return true},"Enregistrer l'intervention");
+  const upd=()=>{const f=formData($("#mform"));const t=otTotals(f);$("#ottot").innerHTML=`Main-d'œuvre <b>${fcfa(t.mo)}</b> + pièces <b>${fcfa(t.tp)}</b> = total <b>${fcfa(t.total)}</b>`};
+  $("#mform").addEventListener("input",upd);upd();
+  $("#fichier").addEventListener("change",ev=>{const fl=ev.target.files&&ev.target.files[0];otFile=null;if(!fl)return;
+    if(fl.type==="application/pdf"){if(fl.size>220000){toast("PDF trop lourd pour l'alpha (220 Ko max) : joignez plutôt une photo.");ev.target.value="";return}const r=new FileReader();r.onload=()=>{otFile={nom:fl.name,type:fl.type,data:r.result}};r.readAsDataURL(fl);return}
+    const img=new Image();const u=URL.createObjectURL(fl);img.onload=()=>{const m=1200,sc=Math.min(1,m/Math.max(img.width,img.height));const c=document.createElement("canvas");c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);c.getContext("2d").drawImage(img,0,0,c.width,c.height);otFile={nom:fl.name,type:"image/jpeg",data:c.toDataURL("image/jpeg",0.6)};URL.revokeObjectURL(u);toast("Rapport joint ("+Math.round(otFile.data.length/1365)+" Ko).")};img.onerror=()=>toast("Image illisible.");img.src=u});
+};
+ACT.addPiece=()=>{const box=$("#prows");if(!box)return;box.insertAdjacentHTML("beforeend",pieceRow(otRows));otRows++};
+ACT.voirOT=d=>{const o=get("maintenances",d.id),e=get("engins",o.enginId);
+  openModal(o.num+" — "+(e?e.code:""),`<dl class="kv"><dt>Date</dt><dd>${dfr(o.date)}</dd><dt>Type</dt><dd>${esc(o.type)} — ${esc(o.nature)}</dd><dt>Intervenant</dt><dd>${esc(o.intervenant.metier)} · ${esc(o.intervenant.nom)} (${esc(o.intervenant.statut)})</dd><dt>Compteur</dt><dd class="num">${fmt(o.compteur)} ${e?e.unite:""}</dd><dt>Saisi par</dt><dd>${esc(o.saisiPar||"")}</dd></dl>
+   ${o.rapport?`<div class="calc" style="white-space:pre-wrap">${esc(o.rapport)}</div>`:""}
+   ${o.piece?(o.piece.type.startsWith("image/")?`<img src="${o.piece.data}" alt="Rapport joint" style="border-radius:8px;border:1px solid var(--line)">`:`<div class="calc">PDF joint : ${esc(o.piece.nom)}</div>`):""}
+   <table class="tbl"><thead><tr><th>Poste</th><th>Référence</th><th class="r">Qté</th><th class="r">P.U.</th><th class="r">Montant</th></tr></thead><tbody>
+   <tr><td>Main-d'œuvre</td><td></td><td></td><td></td><td class="r num">${fmt(o.mainOeuvre)}</td></tr>
+   ${o.pieces.map(p=>`<tr><td>${esc(p.designation)}</td><td class="num">${esc(p.reference||"—")}</td><td class="r num">${fmt(p.qte)}</td><td class="r num">${fmt(p.pu)}</td><td class="r num">${fmt(p.qte*p.pu)}</td></tr>`).join("")}
+   <tr><td colspan="4"><b>Total</b></td><td class="r num"><b>${fmt(o.total)}</b></td></tr></tbody></table>${o.factureId?`<p class="muted" style="margin:0;font-size:13px">Facture prestataire liée : ${esc((get("factures",o.factureId)||{}).numero||"")}</p>`:""}`,()=>true,"Fermer")};
 
 function newReq(x){const r=Object.assign({id:uid("r"),num:"RQ-"+String(1100+list("requetes").length),demandeur:me().nom,service:x.service||"Exploitation",date:todayISO(),creeLe:new Date().toISOString(),etape:0,statut:"En attente",motif:"",hist:[]},x);pushH(r,"Demande créée");
   if(!circuit(r).length){r.statut="Validée";pushH(r,"Niveau N0 : exécution directe sans validation")} return r}
